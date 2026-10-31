@@ -1,0 +1,247 @@
+name: Build Component (x86 & x64)
+
+# 仅在 Actions 页面手动触发
+on:
+  workflow_dispatch:
+
+jobs:
+# =============================================================================
+# 1. Build x86 + x64 (matrix)
+# =============================================================================
+  build-multi-platform:
+    name: Build ${{ matrix.platform }}
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [x86, x64]
+        include:
+          - platform: x86
+            msbuild_platform: Win32
+          - platform: x64
+            msbuild_platform: x64
+
+    steps:
+    # -------------------------------------------------------------------------
+    # 1. Checkout
+    # -------------------------------------------------------------------------
+    - name: Checkout foo_tftags
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    # foobar2000-sdk-modified 使用 Commits169-SDK-2026-10-01 版本
+    # PFC 使用 Commits120-SDK-2026-10-01 版本
+    # （与 foo-nowbar / foo_modernplaylist 构建使用的提交保持一致）
+    - name: Checkout Foobar2000 SDK
+      uses: actions/checkout@v6
+      with:
+        repository: reupen/foobar2000-sdk-modified
+        ref: f56be547d34468da2ff47fcf49eacee41b6f42b1
+        path: lib/columns_ui/foobar2000
+        fetch-depth: 1
+
+    - name: Checkout PFC
+      uses: actions/checkout@v6
+      with:
+        repository: reupen/pfc-modified
+        ref: 75053edf649b41b2202fcc7b9c5c3848a0e9a8cb
+        path: lib/columns_ui/pfc
+        fetch-depth: 1
+
+    # libPPUI 仅需要头文件（helpers/win32_misc.h、file_win32_wrapper.h 等依赖 <libPPUI/...>），
+    # reupen 的 foobar2000-sdk-modified 不包含该目录，因此从官方 SDK 压缩包提取。
+    # 锁定 2026-10-01，与上方 reupen fork 基于的 SDK 版本一致。
+    - name: Download official SDK and extract libPPUI
+      shell: pwsh
+      run: |
+        $sdkUrl = "https://www.foobar2000.org/downloads/SDK-2026-10-01.7z"
+        $zip = "$env:TEMP\fb2k_sdk.7z"
+        Invoke-WebRequest -Uri $sdkUrl -OutFile $zip
+        7z x $zip -o"$env:TEMP\fb2k_sdk" -y | Out-Null
+        if (-not (Test-Path "$env:TEMP\fb2k_sdk\libPPUI\libPPUI.vcxproj")) {
+          Write-Host "::error::libPPUI not found in official SDK archive"
+          exit 1
+        }
+        New-Item -ItemType Directory -Force -Path "lib\columns_ui" | Out-Null
+        Move-Item "$env:TEMP\fb2k_sdk\libPPUI" "lib\columns_ui\libPPUI"
+
+    # -------------------------------------------------------------------------
+    # 2. Build Environment Setup
+    # -------------------------------------------------------------------------
+    - name: Setup MSBuild
+      uses: microsoft/setup-msbuild@v3
+
+    # 仓库内 project 声明为 v145，windows-2022 runner 提供的是 v143
+    - name: Fix Platform Toolset for GitHub Actions
+      shell: pwsh
+      run: |
+        Get-ChildItem -Path lib -Recurse -Filter *.vcxproj | ForEach-Object {
+          $content = Get-Content $_.FullName -Raw
+          if ($content -match 'v14[0-9]') {
+            Write-Host "Fixing: $($_.Name)"
+            $content -replace 'v14[0-9]', 'v143' | Set-Content $_.FullName -NoNewline
+          }
+        }
+
+    # foo_tftags 仓库不包含 vcxproj（.gitignore 已忽略），构建时按源码需要生成
+    - name: Generate foo_tftags.vcxproj
+      shell: pwsh
+      run: |
+        $vcxproj = @'
+        <?xml version="1.0" encoding="utf-8"?>
+        <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+          <ItemGroup Label="ProjectConfigurations">
+            <ProjectConfiguration Include="Release|Win32">
+              <Configuration>Release</Configuration>
+              <Platform>Win32</Platform>
+            </ProjectConfiguration>
+            <ProjectConfiguration Include="Release|x64">
+              <Configuration>Release</Configuration>
+              <Platform>x64</Platform>
+            </ProjectConfiguration>
+          </ItemGroup>
+          <PropertyGroup Label="Globals">
+            <ProjectGuid>{A2A8C1C4-6F4F-4A38-9B62-2B4C6E4A2E5C}</ProjectGuid>
+            <RootNamespace>foo_tftags</RootNamespace>
+            <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+          </PropertyGroup>
+          <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+          <PropertyGroup Label="Configuration">
+            <ConfigurationType>DynamicLibrary</ConfigurationType>
+            <PlatformToolset>v143</PlatformToolset>
+            <CharacterSet>Unicode</CharacterSet>
+            <WholeProgramOptimization Condition="'$(Configuration)'=='Release'">true</WholeProgramOptimization>
+          </PropertyGroup>
+          <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+          <ImportGroup Label="PropertySheets">
+            <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+          </ImportGroup>
+          <PropertyGroup>
+            <TargetName>foo_tftags</TargetName>
+          </PropertyGroup>
+          <ItemDefinitionGroup>
+            <ClCompile>
+              <LanguageStandard>stdcpp17</LanguageStandard>
+              <PrecompiledHeader>NotUsing</PrecompiledHeader>
+              <ConformanceMode>true</ConformanceMode>
+              <MultiProcessorCompilation>true</MultiProcessorCompilation>
+              <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+              <RuntimeTypeInfo>false</RuntimeTypeInfo>
+              <BufferSecurityCheck>false</BufferSecurityCheck>
+              <Optimization>MaxSpeed</Optimization>
+              <PreprocessorDefinitions>WIN32;NDEBUG;_WINDOWS;_USRDLL;UNICODE;_UNICODE;NOMINMAX;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+              <AdditionalIncludeDirectories>$(MSBuildProjectDirectory)\lib\columns_ui;$(MSBuildProjectDirectory)\lib\columns_ui\foobar2000;$(MSBuildProjectDirectory)\lib\columns_ui\pfc;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+            </ClCompile>
+            <Link>
+              <SubSystem>Windows</SubSystem>
+              <GenerateDebugInformation>true</GenerateDebugInformation>
+              <EnableCOMDATFolding>true</EnableCOMDATFolding>
+              <OptimizeReferences>true</OptimizeReferences>
+              <AdditionalLibraryDirectories>$(MSBuildProjectDirectory)\libs\$(Platform);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+              <AdditionalDependencies>foobar2000_SDK.lib;foobar2000_component_client.lib;pfc.lib;$(MSBuildProjectDirectory)\lib\columns_ui\foobar2000\shared\shared-$(Platform).lib;comctl32.lib;uxtheme.lib;gdi32.lib;winmm.lib;shlwapi.lib;shell32.lib;ole32.lib;oleaut32.lib;uuid.lib;ws2_32.lib;dbghelp.lib;imagehlp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+            </Link>
+          </ItemDefinitionGroup>
+          <ItemGroup>
+            <ClCompile Include="foo_tftags.cpp" />
+          </ItemGroup>
+          <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+          <ImportGroup Label="ExtensionTargets" />
+        </Project>
+        '@
+        Set-Content -Path foo_tftags.vcxproj -Value $vcxproj -Encoding utf8
+
+    # -------------------------------------------------------------------------
+    # 3. Build Dependencies
+    # -------------------------------------------------------------------------
+    - name: Build PFC (${{ matrix.platform }})
+      shell: cmd
+      run: |
+        msbuild lib\columns_ui\pfc\pfc.vcxproj ^
+          /p:Configuration=Release ^
+          /p:Platform=${{ matrix.msbuild_platform }} ^
+          /p:OutDir=%CD%\libs\${{ matrix.msbuild_platform }}\ ^
+          /p:IntDir=%CD%\obj\pfc\${{ matrix.msbuild_platform }}\
+
+    - name: Build Foobar2000 SDK (${{ matrix.platform }})
+      shell: cmd
+      run: |
+        msbuild lib\columns_ui\foobar2000\SDK\foobar2000_SDK.vcxproj ^
+          /p:Configuration=Release ^
+          /p:Platform=${{ matrix.msbuild_platform }} ^
+          /p:OutDir=%CD%\libs\${{ matrix.msbuild_platform }}\ ^
+          /p:IntDir=%CD%\obj\foobar2000_SDK\${{ matrix.msbuild_platform }}\
+
+    - name: Build Foobar2000 Component Client (${{ matrix.platform }})
+      shell: cmd
+      run: |
+        msbuild lib\columns_ui\foobar2000\foobar2000_component_client\foobar2000_component_client.vcxproj ^
+          /p:Configuration=Release ^
+          /p:Platform=${{ matrix.msbuild_platform }} ^
+          /p:OutDir=%CD%\libs\${{ matrix.msbuild_platform }}\ ^
+          /p:IntDir=%CD%\obj\foobar2000_component_client\${{ matrix.msbuild_platform }}\
+
+    # -------------------------------------------------------------------------
+    # 4. Build Your Component
+    # -------------------------------------------------------------------------
+    - name: Build foo_tftags (${{ matrix.platform }})
+      shell: cmd
+      run: |
+        msbuild foo_tftags.vcxproj ^
+          /p:Configuration=Release ^
+          /p:Platform=${{ matrix.msbuild_platform }} ^
+          /p:OutDir=%CD%\bin\${{ matrix.platform }}\ ^
+          /p:IntDir=%CD%\obj\foo_tftags\${{ matrix.msbuild_platform }}\
+
+    - name: Upload DLL (${{ matrix.platform }})
+      uses: actions/upload-artifact@v7
+      with:
+        name: foo_tftags_${{ matrix.platform }}
+        path: bin/${{ matrix.platform }}/foo_tftags.dll
+        if-no-files-found: error
+
+# =============================================================================
+# 2. Package → ONE fb2k-component
+# =============================================================================
+  package:
+    runs-on: windows-2022
+    needs: build-multi-platform
+    name: Package fb2k-component
+
+    steps:
+    - name: Download x86 DLL
+      uses: actions/download-artifact@v8
+      with:
+        name: foo_tftags_x86
+        path: component_temp
+
+    - name: Download x64 DLL
+      uses: actions/download-artifact@v8
+      with:
+        name: foo_tftags_x64
+        path: component_temp\x64
+
+    - name: Verify structure
+      shell: cmd
+      run: |
+        echo ===== component structure =====
+        dir component_temp /s
+
+    - name: Create fb2k-component
+      shell: powershell
+      run: |
+        Compress-Archive `
+          -Path "component_temp\*" `
+          -DestinationPath "foo_tftags.zip" `
+          -CompressionLevel Optimal
+
+        Rename-Item `
+          -Path "foo_tftags.zip" `
+          -NewName "foo_tftags.fb2k-component"
+
+    - name: Upload final component
+      uses: actions/upload-artifact@v7
+      with:
+        name: foo_tftags_component
+        path: foo_tftags.fb2k-component
+        if-no-files-found: error
