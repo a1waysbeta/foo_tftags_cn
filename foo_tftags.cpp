@@ -100,7 +100,7 @@ namespace {
     // Field name for a slot, e.g. "tf_albumartist". Empty or duplicate names get a slot number.
     std::string fieldNameFor(size_t index, const std::string* names /* kSlots entries, or null = saved */) {
         auto nameOf = [&](size_t i) {
-            return cleanName(names ? names[i] : std::string(g_slots[i].name.get() ? g_slots[i].name.get() : ""));
+            return cleanName(names ? names[i] : std::string(g_slots[i].name.get().get_ptr()));
             };
         std::string n = nameOf(index);
         if (n.empty()) n = "slot" + std::to_string(index + 1);
@@ -274,8 +274,8 @@ namespace {
     }
 
     titleformat_object::ptr compileScript(size_t slot) {
-        const char* src = g_slots[slot].script.get();
-        const std::string flat = flattenScript(src ? src : "");
+        const auto src = g_slots[slot].script.get();
+        const std::string flat = flattenScript(src.get_ptr());
         ScriptCache& c = scriptCache(slot);
         std::lock_guard<std::mutex> lock(c.m);
         if (!c.init || c.raw != flat) {
@@ -383,8 +383,8 @@ namespace {
             if (!m_wnd) return;
 
             for (size_t i = 0; i < kSlots; ++i) {
-                m_names[i] = g_slots[i].name.get() ? g_slots[i].name.get() : "";
-                m_scripts[i] = g_slots[i].script.get() ? g_slots[i].script.get() : "";
+                m_names[i] = g_slots[i].name.get().get_ptr();
+                m_scripts[i] = g_slots[i].script.get().get_ptr();
             }
 
             m_monoFont = CreateFontW(-MulDiv(9, (int)dpiForWindow(m_wnd), 72), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -544,10 +544,10 @@ namespace {
         bool hasChanges() {
             storeCurrent();
             for (size_t i = 0; i < kSlots; ++i) {
-                const char* n = g_slots[i].name.get();
-                const char* s = g_slots[i].script.get();
-                if (cleanName(m_names[i]) != cleanName(n ? n : "")) return true;
-                if (m_scripts[i] != (s ? s : "")) return true;
+                const auto n = g_slots[i].name.get();
+                const auto s = g_slots[i].script.get();
+                if (cleanName(m_names[i]) != cleanName(n.get_ptr())) return true;
+                if (m_scripts[i] != s.get_ptr()) return true;
             }
             return false;
         }
