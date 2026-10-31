@@ -1,4 +1,4 @@
-// foo_tftags - publishes long titleformat scripts as global tag fields.
+﻿// foo_tftags - publishes long titleformat scripts as global tag fields.
 //
 // Twenty slots. Each slot has a tag name and a titleformat script. The result of the script is
 // exposed to every component that evaluates title formatting as %tf_<name>%, for example
@@ -32,8 +32,8 @@
 #pragma comment(lib, "UxTheme.lib")
 #pragma comment(lib, "Comctl32.lib")
 
-DECLARE_COMPONENT_VERSION("TF Tags", "0.1.0",
-    "Publishes long titleformat scripts as global tag fields (%tf_<name>%).");
+DECLARE_COMPONENT_VERSION("标题格式标签", "0.1.0",
+    "将长标题格式脚本的结果以全局标签字段（%tf_<名称>%）提供给所有组件。");
 VALIDATE_COMPONENT_FILENAME("foo_tftags.dll");
 
 namespace {
@@ -395,13 +395,13 @@ namespace {
                 0, 0, 10, 10, m_wnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(ID_LIST)), hInstance, nullptr);
             setFont(m_list, GetStockObject(DEFAULT_GUI_FONT));
 
-            m_nameLabel = addLabel(L"Tag name (the field is always prefixed with tf_):");
+            m_nameLabel = addLabel(L"标签名称（字段始终带有 tf_ 前缀）：");
             m_name = addEdit(ID_NAME, false);
             m_hint = addLabel(L"");
-            m_scriptLabel = addLabel(L"Titleformat script (several lines are allowed):");
+            m_scriptLabel = addLabel(L"标题格式脚本（可多行）：");
             m_script = addEdit(ID_SCRIPT, true);
             if (m_monoFont) setFont(m_script, m_monoFont);
-            m_test = CreateWindowExW(0, L"BUTTON", L"Test on selected track", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
+            m_test = CreateWindowExW(0, L"BUTTON", L"在选中曲目上测试", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_PUSHBUTTON,
                 0, 0, 10, 10, m_wnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(ID_TEST)), hInstance, nullptr);
             setFont(m_test, GetStockObject(DEFAULT_GUI_FONT));
             m_result = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
@@ -409,9 +409,9 @@ namespace {
                 0, 0, 10, 10, m_wnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(ID_RESULT)), hInstance, nullptr);
             setFont(m_result, GetStockObject(DEFAULT_GUI_FONT));
             m_note = addLabel(
-                L"Scripts may use other slots (%tf_artist%); a slot that refers to itself evaluates to nothing.\n"
-                L"Lines that start with // are ignored. Line breaks and indentation are removed before compiling.\n"
-                L"Restart foobar2000 after changing a tag name; script changes apply at once.");
+                L"脚本可以使用其他槽位（%tf_artist%）；引用自身的槽位会得到空结果。\n"
+                L"以 // 开头的行会被忽略，编译前会移除换行和缩进。\n"
+                L"修改标签名称后需重启 foobar2000；脚本修改会立即生效。");
 
             for (size_t i = 0; i < kSlots; ++i) SendMessageW(m_list, LB_ADDSTRING, 0, 0);
             refreshList();
@@ -513,7 +513,7 @@ namespace {
         }
 
         void updateHint() {
-            const std::string field = "Use in title formatting: %" + fieldNameFor(m_current, m_names) + "%";
+            const std::string field = "在标题格式中使用：%" + fieldNameFor(m_current, m_names) + "%";
             writeWindow(m_hint, field);
         }
 
@@ -573,13 +573,13 @@ namespace {
                 else track = playing;
             }
             if (track.is_empty()) {
-                writeWindow(m_result, "Select a track in the playlist (or start playback) and try again.");
+                writeWindow(m_result, "请在播放列表中选择一首曲目（或开始播放）后重试。");
                 return;
             }
             const std::string flat = flattenScript(m_scripts[m_current]);
             titleformat_object::ptr obj;
             if (flat.empty() || !titleformat_compiler::get()->compile(obj, flat.c_str())) {
-                writeWindow(m_result, "(empty script or the script does not compile)");
+                writeWindow(m_result, "（脚本为空或无法编译）");
                 return;
             }
             pfc::string8 out;
@@ -590,7 +590,7 @@ namespace {
             else {
                 track->format_title(nullptr, out, obj, nullptr);
             }
-            writeWindow(m_result, out.is_empty() ? std::string("(empty result)") : std::string(out.c_str()));
+            writeWindow(m_result, out.is_empty() ? std::string("（结果为空）") : std::string(out.c_str()));
         }
 
         void layoutControls(int w, int h) {
@@ -694,7 +694,7 @@ namespace {
 
     class tftags_preferences_page : public preferences_page_v3 {
     public:
-        const char* get_name() override { return "TF Tags"; }
+        const char* get_name() override { return "标题格式标签"; }
         GUID get_guid() override { return guid_tftags_preferences; }
         GUID get_parent_guid() override { return preferences_page::guid_tools; }
         preferences_page_instance::ptr instantiate(fb2k::hwnd_t parent, preferences_page_callback::ptr callback) override {
