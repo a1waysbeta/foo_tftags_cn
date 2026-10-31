@@ -395,7 +395,7 @@ namespace {
                 0, 0, 10, 10, m_wnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(ID_LIST)), hInstance, nullptr);
             setFont(m_list, GetStockObject(DEFAULT_GUI_FONT));
 
-            m_nameLabel = addLabel(L"标签名称（字段始终带有 tf_ 前缀）：");
+            m_nameLabel = addLabel(L"标签名称（字段始终以 tf_ 为前缀）：");
             m_name = addEdit(ID_NAME, false);
             m_hint = addLabel(L"");
             m_scriptLabel = addLabel(L"标题格式脚本（可多行）：");
@@ -409,8 +409,8 @@ namespace {
                 0, 0, 10, 10, m_wnd, reinterpret_cast<HMENU>(static_cast<INT_PTR>(ID_RESULT)), hInstance, nullptr);
             setFont(m_result, GetStockObject(DEFAULT_GUI_FONT));
             m_note = addLabel(
-                L"脚本可以使用其他槽位（%tf_artist%）；引用自身的槽位会得到空结果。\n"
-                L"以 // 开头的行会被忽略，编译前会移除换行和缩进。\n"
+                L"脚本可以引用其他槽位（%tf_artist%）；槽位引用自身时结果为空。\n"
+                L"以 // 开头的行会被忽略；编译前会移除换行和缩进。\n"
                 L"修改标签名称后需重启 foobar2000；脚本修改会立即生效。");
 
             for (size_t i = 0; i < kSlots; ++i) SendMessageW(m_list, LB_ADDSTRING, 0, 0);
